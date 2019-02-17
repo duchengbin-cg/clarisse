@@ -1,0 +1,188 @@
+import ix
+ 
+import os
+import json
+import ntpath
+ 
+ 
+def read_mat_data(file_path=None, current_context = None, default_path="project://scene"):
+ 
+    """
+    file_path: path to the json file on your computer
+ 
+    current_context: the context where your imported geometry are in and the context the new shaders from the json file will be assigned to
+    , you can also type the path to the context like so:
+    ----> current_context = "project://scene/my_model_context"
+ 
+    default_path: path to where you want to create your textures and materials, default is: "project://scene"
+ 
+    """
+ 
+    #putting the function to a history stack so you could CTR+Z
+    ix.begin_command_batch('CreateShadersAndAssign')
+ 
+    if current_context == None:
+        current_context = ix.get_current_context()
+ 
+    if not current_context:
+        return
+ 
+    if not file_path:
+        return
+ 
+    if not os.path.exists(file_path):
+        return
+ 
+    # Open the json file and read the data
+    with open(file_path, 'r') as fp:
+        dataA = json.load(fp)
+ 
+    if not dataA:
+        return
+ 
+    tex_context = ix.cmds.CreateContext("textures", default_path )
+    mat_context = ix.cmds.CreateContext("materials", default_path )
+ 
+    allObjects = []
+    all_materials = []
+ 
+    for shader in dataA:
+        if shader:
+            shader_name = shader['name']
+            objectA = shader['object_name']
+            disp_texture = shader['disp_name']
+ 
+            if disp_texture:
+ 
+                disp_tex = shader.get('disp_name')[0]
+ 
+                # create a displacement node
+                disp_node = ix.cmds.CreateObject(str(ntpath.basename(disp_tex)) + "_disp",
+                                                    "Displacement", "Global",
+                                                    tex_context)
+                # create texture for displacement
+                disp_TextureNode = ix.cmds.CreateObject(str(ntpath.basename(disp_tex)) + "_dispTX",
+                                                    "TextureStreamedMapFile", "Global",
+                                                    tex_context)
+ 
+                # setting displacement texture values
+                ix.cmds.SetTexture([disp_node.get_full_name() + ".front_value"],
+                                   disp_TextureNode.get_full_name())
+ 
+                ix.cmds.SetValues([disp_TextureNode.get_full_name() + ".filename[0]"], [str(disp_tex)])
+                ix.cmds.SetValues([disp_TextureNode.get_full_name() + ".color_space_auto_detect"], ["0"])
+                ix.cmds.SetValues([disp_TextureNode.get_full_name() + ".file_color_space"], ["linear"])
+ 
+ 
+            if objectA:
+                object_name = shader.get('object_name')
+ 
+            # Create Physical Material
+            if shader_name:
+                standard_mat = ix.cmds.CreateObject(str(shader_name) + '_mat', "MaterialPhysicalStandard", "Global",
+                                                    mat_context)
+                #setting spec value to 0 by default
+                ix.cmds.SetValues([standard_mat.get_full_name() + ".specular_1_strength" ],
+                                                          ["0"])
+ 
+                #storing all shaders in one fat list just in case
+                all_materials.append(standard_mat)
+ 
+            #setting defferent attrs
+            if standard_mat:
+                attributes_data = shader.get('data')
+ 
+                if attributes_data:
+                    for i in attributes_data:
+                        if i:
+ 
+                            if isinstance(i, dict):
+                                for clar_id, val in i.iteritems():
+                                    if val !=None:
+ 
+                                        # Everything that is a list considered as color values
+                                        if isinstance(val, list) and len(val) == 3:
+                                            ix.cmds.SetValues([standard_mat.get_full_name() + "." + str(clar_id)],
+                                                              [str(val[0]), str(val[1]), str(val[2])])
+ 
+                                        # Everything that is a string is considered as a file path
+                                        elif isinstance(val, basestring):
+                                            tex_name = ntpath.basename(val)
+                                            if tex_name:
+                                                texture_node = ix.cmds.CreateObject(str(tex_name) + "_tx",
+                                                                                "TextureStreamedMapFile", "Global", tex_context )
+ 
+                                                if texture_node:
+ 
+                                                    ix.cmds.SetValues([texture_node.get_full_name() + ".filename[0]"],
+                                                                      [str(val)])
+ 
+ 
+                                                # for bump mapping
+                                                if clar_id == 'normal_input':
+                                                    bumpType = shader.get('normal_type')[0]
+                                                    #print 'i am a normal input'
+                                                    bump_node = ix.cmds.CreateObject(str(ntpath.basename(val)) + "_bumpNode",
+                                                                                    str(bumpType), "Global",
+                                                                                    tex_context)
+ 
+                                                    ix.cmds.SetTexture([bump_node.get_full_name() + ".input"],
+                                                                       texture_node.get_full_name())
+ 
+                                                    ix.cmds.SetTexture([standard_mat.get_full_name() + "." + str(clar_id)],
+                                                                       bump_node.get_full_name())
+                                                else:
+                                                #everything that's not a bump map
+                                                    ix.cmds.SetTexture([standard_mat.get_full_name() + "." + str(clar_id)],
+                                                                       texture_node.get_full_name())
+                                        else:
+                                            # Set the attribute
+                                            ix.cmds.SetValues([standard_mat.get_full_name() + "." + str(clar_id)],
+                                                              [str(val)])
+ 
+ 
+        ########################################SHADER ASSIGNMENT########################################################
+ 
+            #filtering by name from the json file
+            allObjects = []
+            for n in object_name:
+                if n:
+                    #A container that will contain all the items in the scene
+                    objects = ix.api.OfObjectVector()
+                    filter = "%s" % str(n)
+                    filterz = "*%s" % str(n)
+                    className = "Geometry"
+                    # This function will looking for matching object with le filter.
+                    item = ix.application.get_factory().get_object('%s/%s' % ( str(current_context), str(filter) ) )
+ 
+            ####YOU CAN ENABLE THE BELOW THREE LINES IF YOU WANT TO GET THE ITEM NAME FROM THE WHOLE SCENE###########################
+ 
+                    #if not item:
+                        #ix.application.get_matching_objects(objects, filterz, className)
+                        #item = objects[0]
+ 
+            #######################################################################################################################
+ 
+    #               assign the newly created shader to that object if found
+ 
+                    if item:
+                        allObjects.append(item)
+                        ix.cmds.SetValues( [str(item) + ".materials[0]"], [str(standard_mat)] )
+    #               assign displacement to object if any
+                        if disp_texture:
+                            ix.cmds.SetValues( [str(item) + ".displacements[0]"], [str(disp_node)] )
+    shading_name = str(current_context).split('/')[-1]
+    shadingLayer = ix.cmds.CreateShadingLayerForItems(allObjects, 2, mat_context)
+    ix.cmds.RenameItem(str(shadingLayer), '%s___shading_layer' % shading_name )
+    #print len(all_materials)
+ 
+#            print '\n %s ' % len(allObjects)
+ 
+        ########################################SHADER ASSIGNMENT########################################################
+ 
+    #putting the function to a history stack so you could CTR+Z
+    ix.end_command_batch()
+ 
+ 
+# Example Script:
+read_mat_data(file_path='D:/tank.json', default_path="project://scene")

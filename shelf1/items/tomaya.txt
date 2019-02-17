@@ -1,0 +1,287 @@
+import maya.cmds as cmds
+ 
+import os
+import json
+ 
+"""
+    PLEASE NOTE : THIS SCRIPT WILL NOT EXPORT DATA CORRECTLY IF YOU HAVE ANY COMPLICATED SHADER SETUP IN MAYA LIKE LAYERED 
+    SHADERS/TESTURES 
+    OR UTILITY NODES!!
+    IMPORTANT NOTE : MAKE SURE YOUR OBJECTS NAMES IN MAYA ARE UNIQUE or otherwise the script will fail!! 
+"""
+#############################Attributes pairs between arnold and clarisse###################################
+ 
+clarisse_aiStandard_pairs = {
+                            'diffuse_front_color': 'color', 
+                            'diffuse_front_strength': 'Kd',
+                            'diffuse_back_strength': 'Kb',
+ 
+                            'specular_1_color': 'KsColor',
+                            'specular_1_strength': 'Ks',
+                            'specular_1_roughness': 'specularRoughness',
+                            'specular_1_anisotropy': 'specularAnisotropy',
+                            'specular_1_anisotropy_rotation': 'specularRotation',
+                            'specular_1_fresnel_reflectivity': 'Ksn',
+ 
+                            'transmission_color': 'KtColor',
+                            'transmission_strength': 'Kt',
+                            'transmission_index_of_refraction': 'IOR',
+                            'transmission_roughness': 'refractionRoughness',
+                            'transmittance_color': 'transmittance',                          
+                            'emission_color': 'emissionColor',
+                            'emission_strength': 'emission',
+ 
+                            'normal_input' : 'normalCamera',
+                            'opacity': 'opacity'
+                            }
+clarisse_Maya_pairs = {
+                            'diffuse_front_color': 'color', 
+                            'specular_1_color': 'specularColor',
+                            'normal_input' : 'normalCamera',
+                            'opacity' : 'transparency'
+                             }
+clarisse_alSurface_pairs = {
+                            'diffuse_front_color': 'diffuseColor',
+                            'diffuse_front_strength': 'diffuseStrength',
+                            'diffuse_roughness': 'diffuseRoughness',
+                            'diffuse_back_color': 'backlightColor',
+                            'diffuse_back_strength': 'backlightStrength',
+ 
+                            'diffuse_sss_mix': 'sssMix',
+                            'diffuse_sss_mode': 'sssMode',
+                            'diffuse_sss_density_scale': 'sssDensityScale',
+                            'diffuse_sss_color_1': 'sssRadiusColor',
+                            'diffuse_sss_distance_1': 'sssRadius',
+                            'diffuse_sss_weight_1': 'sssWeight1',
+                            'diffuse_sss_color_2': 'sssRadiusColor2',
+                            'diffuse_sss_distance_2': 'sssRadius2',
+                            'diffuse_sss_weight_2': 'sssWeight2',
+                            'diffuse_sss_color_3': 'sssRadiusColor3',
+                            'diffuse_sss_distance_3': 'sssRadius3',
+                            'diffuse_sss_weight_3': 'sssWeight3',
+                            'diffuse_sss_group[0]': 'sssTraceSet',
+ 
+                            'diffuse_normal_mode': None,
+                            'diffuse_normal_input': 'diffuseNormal',
+ 
+                            'specular_1_color': 'specular1Color',
+                            'specular_1_strength': 'specular1Strength',
+                            'specular_1_roughness': 'specular1Roughness',
+                            'specular_1_anisotropy': 'specular1Anisotropy',
+                            'specular_1_anisotropy_rotation': 'specular1Rotation',
+                            'specular_1_fresnel_mode': 'specular1FresnelMode',
+                            'specular_1_index_of_refraction': 'specular1Ior',
+                            'specular_1_fresnel_preset': None,
+                            'specular_1_fresnel_reflectivity': 'specular1Reflectivity',
+                            'specular_1_fresnel_edge_tint': 'specular1EdgeTint',
+                            'specular_1_brdf': 'specular1Distribution',
+                            'specular_1_exit_color': None,
+                            'specular_1_normal_mode': None,
+                            'specular_1_normal_input': 'specular1Normal',#
+ 
+                            'specular_2_color': 'specular2Color',
+                            'specular_2_strength': 'specular2Strength',
+                            'specular_2_roughness': 'specular2Roughness',
+                            'specular_2_anisotropy': 'specular2Anisotropy',
+                            'specular_2_anisotropy_rotation': 'specular2Rotation',
+                            'specular_2_fresnel_mode': 'specular1FresnelMode',
+                            'specular_2_index_of_refraction': 'specular2Ior',
+                            'specular_2_fresnel_preset': None,
+                            'specular_2_fresnel_reflectivity': 'specular2Reflectivity',
+                            'specular_2_fresnel_edge_tint': 'specular2EdgeTint',
+                            'specular_2_brdf': 'specular1Distribution',
+                            'specular_2_exit_color': None,
+                            'specular_2_normal_mode': None,
+                            'specular_2_normal_input': 'specular2Normal',
+ 
+                            'transmission_color': 'transmissionColor',
+                            'transmission_strength': 'transmissionStrength',
+                            'transmission_link_to_specular': 'transmissionLinkToSpecular1',
+                            'transmission_linked_to': None,
+                            'transmission_index_of_refraction': 'transmissionIor',
+                            'transmission_roughness': 'transmissionRoughness',
+                            'transmittance_color': 'ssAttenuationColor',
+                            'transmittance_density': 'ssDensityScale',
+                            'transmission_exit_color': None,
+                            'transmission_normal_mode': None,
+                            'transmission_normal_input': 'transmissionNormal',
+ 
+                            'emission_color': 'emissionColor',
+                            'emission_strength': 'emissionStrength',
+ 
+                            'normal_input' : 'normalCamera',
+ 
+                            'opacity': 'opacity'
+                            }
+                                                                                       
+clarisse_arnold_pairs = { 'aiStandard' : clarisse_aiStandard_pairs, 'alSurface' : clarisse_alSurface_pairs, 'blinn' : clarisse_Maya_pairs
+                            , 'lambert' : clarisse_Maya_pairs, 'phong' : clarisse_Maya_pairs, 'phongE' : clarisse_Maya_pairs}
+ 
+############################################################################################################
+ 
+def store_alstandard_mat_data(objA=None, file_path=None):
+ 
+    if objA == None:
+        objA = cmds.ls( sl=True )
+    """
+    ***for perfect results use alSurface shaders in maya***
+    **you can export shader data from (mayaShaders, aiStandard, alSurface), if you want more shaders you can add pairs to 
+        "clarisse_arnold_pairs" dictionary in the begining of the script and it will export automatically the new added shader Types!! 
+    ***Store the Arnold AlStandard material attributes in a json file
+ 
+    Example: store_alstandard_mat_data(objA=['sphere1'], file_path='c:/test_mat.json')
+    :param shader_nameA: array, string name of the object to query from
+    :param file_path: str, full output path
+    """
+    if not objA:
+        print 'please select objects to begin exporting data'
+        return
+ 
+    if not file_path:
+        print 'please specify a path to save the JSON file'
+        return
+ 
+    shader_nameA_dict = {}
+ 
+    for i in objA:
+        allChildren = cmds.listRelatives(i, ad=1)
+        for eachChild in allChildren:
+            # Get the shader groups attached to this particular object
+            shaderGroups = cmds.listConnections(cmds.listHistory(eachChild))
+            if shaderGroups is not None:
+                # Get the material attached to the shader group
+                materials = [x for x in cmds.ls(cmds.listConnections(shaderGroups), materials=1)]
+                #filtering materials and adding it the material dict
+                if materials:
+                    for mat in materials:
+                        nodeType = cmds.nodeType(mat)
+                        if not nodeType in shader_nameA_dict.keys():
+                            shader_nameA_dict[nodeType] = []
+                        if not mat in shader_nameA_dict.values():
+                            shader_nameA_dict[nodeType].append(mat)
+ 
+    if not shader_nameA_dict:
+        return
+ 
+    shaderA = []
+ 
+    for node_type, shader_nameA in shader_nameA_dict.iteritems():
+        if node_type:
+            for shader_name in shader_nameA:
+                shaderName = shader_name
+                #checking for namespaces
+                if ':' in shaderName:
+                    shaderName = shader_name.split(':')[-1]
+ 
+                attributes = cmds.listAttr(shader_name, visible=True)
+ 
+                #adding normal attr to the list if it's aiStandard
+                if node_type == 'aiStandard':
+                    attributes.append('normalCamera')
+ 
+                # getting the object name
+                shading_engine = cmds.listConnections(shader_name, type='shadingEngine')[0]
+                nameA = cmds.listRelatives(cmds.listConnections(shading_engine, type = 'mesh'))
+                object_name = []
+ 
+                # adding the object name to the list without namespaces
+                for n in nameA:
+                    if cmds.nodeType(n) == 'mesh':
+                        if ':' in n:
+                            n = n.split(':')[-1]
+                        if n not in object_name:
+                            object_name.append(n)   
+ 
+                #getting displacement shader
+                disp_conn_node = cmds.listConnections(shading_engine + '.displacementShader', d=False, s=True)
+ 
+                # base dictionary keys and values to be written in the json file       
+                atrA = {'object_name' : object_name, 'disp_name' : [], 'name': shaderName, 'data': [], 'normal_type': []}
+ 
+                #getting displacement texture path and adding it to the json dict
+                if disp_conn_node:
+                    if cmds.nodeType(disp_conn_node) == 'displacementShader':
+                        disp_file = cmds.listConnections(disp_conn_node[0] + '.displacement' , d=False, s=True)
+                        if disp_file:
+                            tx_disp_file_path = cmds.getAttr(disp_file[0] + '.fileTextureName')         
+                            # If it has a file path check if it's valid
+                            if tx_disp_file_path:                                                  
+                                if os.path.exists(tx_disp_file_path) or 'UDIM' in tx_disp_file_path:
+                                    disp_name = tx_disp_file_path.replace('\\', '/')
+                                    disp_attr = str(disp_name)
+                                    atrA['disp_name'].append(disp_attr)
+ 
+ 
+                for i in attributes:
+ 
+                    value = cmds.getAttr(shader_name + '.' + str(i))
+ 
+                    if value != None:
+                        #check if the attr is color value not a texture
+                        if isinstance(value, list):
+                            #inverting transparency for maya shaders
+                            if i == 'transparency':
+                                value = [1-t for t in value[0]]
+                            else:
+                                value = value[0]
+  
+                        # Check if output plug has a file node connection
+                        output_conn_node = cmds.listConnections(shader_name + '.' + str(i), d=False, s=True)
+ 
+                        if output_conn_node:
+                            if cmds.nodeType(output_conn_node, api=True) == 'kFileTexture':
+                                tx_file_path = cmds.getAttr(output_conn_node[0] + '.fileTextureName')
+ 
+                                # If it has a file path check if it's valid
+                                if tx_file_path:
+                                    if os.path.exists(tx_file_path) or 'UDIM' in tx_file_path:
+                                        value = tx_file_path.replace('\\', '/')
+ 
+                        # Override for bump maps
+                        # Check if input plug has a file node connection
+                        bump_conn_node = cmds.listConnections(shader_name + '.' + str(i), d=False, s=True)
+                        if bump_conn_node:
+                            if cmds.nodeType(bump_conn_node) == 'bump2d':
+                                #checking whether it's a bump or normal 
+                                normalType = cmds.getAttr(bump_conn_node[0] + '.bumpInterp')
+                                if normalType == 0:
+                                    atrA['normal_type'].append('TextureBumpMap')
+                                if normalType == 1:
+                                    atrA['normal_type'].append('TextureNormalMap')
+ 
+                                bump_input = cmds.listConnections(bump_conn_node[0] + '.bumpValue', d=False, s=True)
+ 
+                                if bump_input:
+                                    tx_bmp_file_path = cmds.getAttr(bump_input[0] + '.fileTextureName')
+ 
+                                    # If it has a file path check if it's valid
+                                    if tx_bmp_file_path:
+                                        if os.path.exists(tx_bmp_file_path) or 'UDIM' in tx_bmp_file_path:
+                                            value = tx_bmp_file_path.replace('\\', '/')
+                        #getting the corresponding dict based on the node_type
+                        pairs = clarisse_arnold_pairs.get(node_type)
+                        if pairs:
+                            for clar_id, arnold_id in pairs.iteritems():
+                                if i == arnold_id:
+                                    attr = {clar_id: value}
+                                    atrA['data'].append(attr)
+  
+                if atrA:
+                    if not atrA in shaderA:
+                        shaderA.append(atrA)
+ 
+    #testing the values                  
+    # for v in shaderA:
+    #     for k, v in v.iteritems():
+    #         print k,v
+ 
+ 
+    #save data to the json file        
+    if shaderA:
+        with open(file_path, 'w') as fp:
+            json.dump(shaderA, fp, sort_keys=False, indent=4)
+ 
+        print '[Info]Finished exporting material data...'
+ 
+# Example script:
+store_alstandard_mat_data(file_path='D:/your_path/Clarisse/tank.json')
